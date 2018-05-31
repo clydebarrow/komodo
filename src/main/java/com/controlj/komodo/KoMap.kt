@@ -34,9 +34,14 @@ import java.util.concurrent.atomic.AtomicLong
  *
  */
 class KoMap<Value> internal constructor(private val store: Komodo, val name: String, val codec: Codec<Value>) {
+    // the data is stored here
     private val mvMap: MVMap<Long, ByteArray>
+    // the next primary key
     private val nextKey = AtomicLong()
-    private val indexMap = codec.indices.map { it.name to it }.toMap()
+    // lookup table for indices as provided by the codec
+    private val indices = codec.indices.map { it.name to it }.toMap()
+    // the maps for each index, lazily populated
+    private val indexMaps: HashMap<String, MVMap<ByteArray, Long>> = HashMap()
 
     init {
         if (name.contains('.'))
@@ -46,6 +51,15 @@ class KoMap<Value> internal constructor(private val store: Komodo, val name: Str
         nextKey.set(mvMap.lastKey() ?: 0)
     }
 
+    /**
+     * Get the index map for the given name
+     *
+     */
+
+    private fun getIndex(indexName: String): MVMap<ByteArray, Long> {
+        return indexMaps.getOrPut(indexName, {store.store.openMap(fullIndexName(indexName))})
+
+    }
     /**
      * Insert an object into the map
      *
@@ -57,47 +71,38 @@ class KoMap<Value> internal constructor(private val store: Komodo, val name: Str
      */
 
     fun insert(data: Value): Long {
-        val keyValue: Long
-        keyValue = nextKey.incrementAndGet()
+        val primaryKey: Long = nextKey.incrementAndGet()
         // if we have no indices, do a simple insert
         if (codec.indices.isEmpty()) {
-            mvMap.put(keyValue, codec.encode(data))
+            mvMap.put(primaryKey, codec.encode(data))
         } else {
             // otherwise begin a transaction, insert and update indices
 
-            updateIndices(keyValue, data)
+            storeData(primaryKey, data)
         }
-        return keyValue
+        return primaryKey
     }
 
-    /**
-     * Retrieve an index map for a given name
-     *
-     */
-
-    internal fun getIndex(name: String): MVMap<ByteArray, Long> {
-        return store.store.openMap(fullIndexName(name))
-    }
     /**
      * Store data and update indices.
-     * @param keyValue The primary key to be used
+     * @param primaryKey The primary key to be used
      * @param data  The data to be stored
      * @param overwrite IF set, overwriting is permitted
      * @throws [DuplicateValueException] if a unique index is duplicated
      */
-    private fun updateIndices(keyValue: Long, data: Value, overwrite: Boolean = false) {
+    private fun storeData(primaryKey: Long, data: Value, overwrite: Boolean = false) {
 
         //val transaction = store.transactionStore.begin()
         codec.indices.forEach { index ->
-            val indexMap = store.store.openMap<ByteArray, Long>(fullIndexName(index.name))
-            val old = indexMap.put(getKey(index, data, keyValue), keyValue)
-            if (old != null && old != keyValue && !overwrite) {
+            val indexMap = getIndex(index.name)
+            val old = indexMap.put(getKey(index, data, primaryKey), primaryKey)
+            if (old != null && old != primaryKey && !overwrite) {
                 //transaction.rollback()
                 throw DuplicateValueException(index.name)
             }
         }
         //val valueMap = transaction.openMap<Long, ByteArray>(mvMap.name)
-        mvMap.put(keyValue, codec.encode(data))
+        mvMap.put(primaryKey, codec.encode(data))
         //transaction.commit()
     }
 
@@ -112,6 +117,26 @@ class KoMap<Value> internal constructor(private val store: Komodo, val name: Str
         return null
     }
 
+    /**
+     * Delete an object
+     * @param primaryKey The primary key for the data
+     */
+
+    fun delete(primaryKey: Long) {
+        val data = mvMap.get(primaryKey)
+        if(data == null)
+            return
+        //val transaction = store.transactionStore.begin()
+        codec.indices.forEach { index ->
+            val indexMap = store.store.openMap<ByteArray, Long>(fullIndexName(index.name))
+            indexMap.remove(getKey(index, codec.decode(data), primaryKey))
+        }
+        //val valueMap = transaction.openMap<Long, ByteArray>(mvMap.name)
+        mvMap.remove(primaryKey)
+        //transaction.commit()
+
+
+    }
     /**
      * Get the full name of the index map. This is the name of the primary map joined to the
      * index name with a dot. Hence dots are not allowed in primary map names
@@ -132,24 +157,34 @@ class KoMap<Value> internal constructor(private val store: Komodo, val name: Str
     }
 
     private fun addPrimaryKey(keyValue: ByteArray, primaryKey: Long): ByteArray {
-        val key = ByteBuffer.allocate(keyValue.size + 8)
+        val key = ByteBuffer.allocate(keyValue.size + java.lang.Long.SIZE)
         key.put(keyValue)
         key.putLong(primaryKey)
         return key.array()
     }
 
     /**
+     *  Create a query on this map using a specified index. The Query is a Flowable which can be subscribed to
+     *  to access the returned objects. Objects will be delivered in keyvalue order for the specified index. If both
+     *  key bounds and start/count values are provided, the start value is taken from the lower bound, i.e. the start and
+     *  count values limit results *within* the key bounds.
      *
+     *  @param indexName    The name of the index to use. Must be one of the indices provided by the associated CODEC
+     *  @param lowerBound   (optional) A KeyWrapper the represents the lower key bound. The default is to start at the beginning of the index.
+     *  @param upperBound   (optional) A KeyWrapper representing the upper key bound. The default is the end of the index
+     *  @param start    (optional) The ordinal of the first result to deliver - the default is 0.
+     *  @param count    (optional) The maximum number of results to deliver - the default is all of them
+     *  @param reverse  IF true, the results will be delivered in reverse (descending) order. The default is false (ascending order)
      */
 
     fun query(
             indexName: String,
-            lowerBound: KeyValue = KeyValue.START,
-            upperBound: KeyValue = KeyValue.END,
+            lowerBound: KeyWrapper = KeyWrapper.START,
+            upperBound: KeyWrapper = KeyWrapper.END,
             start: Int = 0,
             count: Int = Integer.MAX_VALUE,
             reverse: Boolean = false): Query<Value> {
-        if(!indexMap.containsKey(indexName))
+        if(!indices.containsKey(indexName))
             throw UnknownIndexException(indexName)
         return Query(this, getIndex(indexName), lowerBound, upperBound, start, count, reverse)
     }

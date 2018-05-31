@@ -66,7 +66,7 @@ interface Codec<T> {
          * @param data The object from which to generate the key
          * @return The generated key as a byte array
          */
-        fun keyGen(data: T) : KeyValue
+        fun keyGen(data: T) : KeyWrapper
 
     }
 }

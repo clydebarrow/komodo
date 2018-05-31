@@ -23,7 +23,6 @@ import org.h2.mvstore.tx.TransactionStore
 
 /**
  * Copyright (C) Control-J Pty. Ltd. ACN 103594190
- * All rights reserved
  *
  * User: clyde
  * Date: 29/5/18

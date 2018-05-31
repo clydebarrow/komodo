@@ -23,7 +23,6 @@ import org.junit.After
 import org.junit.Assert.*
 import org.junit.Before
 import org.junit.Test
-import java.nio.ByteBuffer
 
 class KoMapTest {
 
@@ -42,47 +41,17 @@ class KoMapTest {
 
                     override val unique: Boolean = false
 
-                    override fun keyGen(data: String): KeyValue {
-                        return KeyValue(data)
+                    override fun keyGen(data: String): KeyWrapper {
+                        return KeyWrapper(data)
                     }
-                })
+                },
+                object : Codec.Index<String> {
+                    override val name: String = "second"
 
-    }
+                    override val unique: Boolean = true
 
-    class ListCoder : Codec<List<String>> {
-        override fun encode(data: List<String>): ByteArray {
-            val total = data.size * Integer.SIZE + data.sumBy { it.toByteArray().size }
-            val buffer = ByteBuffer.allocate(total)
-            data.forEach {
-                val array = it.toByteArray()
-                buffer.putInt(array.size)
-                buffer.put(array)
-            }
-            return buffer.array()
-        }
-
-        override fun decode(encodedData: ByteArray): List<String> {
-            val buffer = ByteBuffer.wrap(encodedData)
-            val list = ArrayList<String>()
-            while (buffer.hasRemaining()) {
-                val length = buffer.getInt()
-                val stringbuf = ByteArray(length)
-                buffer.get(stringbuf)
-                list.add(String(stringbuf))
-            }
-            return list
-        }
-
-        override val indices: List<Codec.Index<List<String>>> = listOf<Codec.Index<List<String>>>(
-                object : Codec.Index<List<String>> {
-                    override val name: String = "first"
-
-                    override val unique: Boolean = false
-
-                    override fun keyGen(data: List<String>): KeyValue {
-                        val buffer = ByteBuffer.allocate(10)
-                        data.take(1).forEach { buffer.put(it.toByteArray()) }
-                        return KeyValue(buffer)
+                    override fun keyGen(data: String): KeyWrapper {
+                        return KeyWrapper(data)
                     }
                 })
 
@@ -100,17 +69,6 @@ class KoMapTest {
     fun tearDown() {
         komodo.close()
     }
-
-    private val stringLists1: List<String> = listOf(
-            "first data1",
-            "second data",
-            "third data°€↑"
-    )
-    private val stringLists: List<String> = listOf(
-            "first data",
-            "second data",
-            "third data°€↑"
-    )
 
     @Test
     fun komapTest() {
@@ -149,19 +107,19 @@ class KoMapTest {
             assertEquals(5, cnt)
         })
 
-        cnt = 3
-        query = map.query("first", lowerBound = KeyValue("String 10"), upperBound = KeyValue("String 8"), start = 2, count = 10)
-        query.subscribe({
-            println("cnt = $cnt, result = $it")
-            assertEquals("String $cnt", it)
-            cnt++
-        }, {
-            fail(it.toString())
-        }, {
-            assertEquals(9, cnt)
-        })
+        listOf("first", "second").forEach { indexName ->
+            cnt = 3
+            query = map.query(indexName, lowerBound = KeyWrapper("String 10"), upperBound = KeyWrapper("String 8"), start = 2, count = 10)
+            query.subscribe({
+                //println("cnt = $cnt, result = $it")
+                assertEquals("String $cnt", it)
+                cnt++
+            }, {
+                fail(it.toString())
+            }, {
+                assertEquals(9, cnt)
+            })
+        }
 
-        val listMap = komodo.koMap("lists", ListCoder())
-        listMap.insert(stringLists)
     }
 }

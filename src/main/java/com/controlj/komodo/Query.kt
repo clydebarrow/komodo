@@ -43,46 +43,50 @@ import org.reactivestreams.Subscription
 class  Query<V> internal constructor(
         private val map: KoMap<V>,
         private val index: MVMap<ByteArray, Long>,
-        private val lowerBound: KeyValue,
-        private val upperBound: KeyValue,
+        private val lowerBound: KeyWrapper,
+        private val upperBound: KeyWrapper,
         private val start: Int,
         private val limit: Int,
         private val reverse: Boolean
         ): Flowable<V>() {
 
-    private var position = 0
-    private var nextKey: ByteArray? = null
-    private var lastKey: ByteArray? = null
 
     override fun subscribeActual(s: Subscriber<in V>) {
+        val firstKey: ByteArray?
+        val lastKey: ByteArray?
         val upperKey = when(upperBound) {
-            KeyValue.END -> index.lastKey()
-            KeyValue.START -> index.firstKey()
+            KeyWrapper.END -> index.lastKey()
+            KeyWrapper.START -> index.firstKey()
             else -> {
                 val last = index.ceilingKey(upperBound.byteArray)
                 if(upperBound.isPrefixOf(last)) last else index.lowerKey(last)
             }
         }
         val lowerKey = when(lowerBound) {
-            KeyValue.END -> index.lastKey()
-            KeyValue.START -> index.firstKey()
+            KeyWrapper.END -> index.lastKey()
+            KeyWrapper.START -> index.firstKey()
             else -> index.ceilingKey(lowerBound.byteArray)
         }
         if(reverse) {
-            nextKey = upperKey
+            firstKey = upperKey
             lastKey = lowerKey
         } else {
-            nextKey = lowerKey
+            firstKey = lowerKey
             lastKey = upperKey
         }
 
         s.onSubscribe(object: Subscription {
+            var cancelled = false
+            var nextKey = firstKey
+            var position = 0
+
             override fun cancel() {
+                cancelled = true
             }
 
             override fun request(n: Long) {
                 var count = n
-                while(count != 0L) {
+                while(count != 0L && !cancelled) {
                     if(nextKey == null || position == start+limit) {
                         s.onComplete()
                         return
@@ -103,7 +107,22 @@ class  Query<V> internal constructor(
                         s.onComplete()
                         return
                     }
-                    nextKey = if(reverse) index.lowerKey(nextKey) else index.higherKey(nextKey)
+                    // what if lastKey was removed from the index?
+                    // check for exceeding bounds
+                    if(reverse) {
+                        nextKey = index.lowerKey(nextKey)
+                        if(!lowerBound.isPrefixOf(nextKey) && lowerBound.compareTo(nextKey) > 0) {
+                            s.onComplete()
+                            return
+                        }
+                    } else {
+                        nextKey = index.higherKey(nextKey)
+                        if(!upperBound.isPrefixOf(nextKey) && upperBound.compareTo(nextKey) < 0) {
+                            s.onComplete()
+                            return
+                        }
+
+                    }
                 }
             }
         })
