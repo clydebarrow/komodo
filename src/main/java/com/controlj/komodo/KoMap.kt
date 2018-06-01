@@ -160,16 +160,17 @@ class KoMap<Value> internal constructor(private val store: Komodo, val name: Str
         val data = mvMap.get(primaryKey.byteArray)
         if (data == null)
             return
+        delete(codec.decode(data), primaryKey)
+    }
+    internal fun delete(data: Value, primaryKey: KeyWrapper) {
         //val transaction = store.transactionStore.begin()
         indexList.forEach { index ->
             val indexMap = store.store.openMap<ByteArray, Long>(fullIndexName(index.name))
-            indexMap.remove(getKey(index, codec.decode(data), primaryKey).byteArray)
+            indexMap.remove(getKey(index, data, primaryKey).byteArray)
         }
         //val valueMap = transaction.openMap<Long, ByteArray>(mvMap.name)
         mvMap.remove(primaryKey.byteArray)
         //transaction.commit()
-
-
     }
 
     /**
@@ -205,6 +206,7 @@ class KoMap<Value> internal constructor(private val store: Komodo, val name: Str
      *  count values limit results *within* the key bounds.
      *
      *  @param indexName    The name of the index to use. Must be one of the indices provided by the associated CODEC
+     *                      The default is the primary key index
      *  @param lowerBound   (optional) A KeyWrapper the represents the lower key bound. The default is to start at the beginning of the index.
      *  @param upperBound   (optional) A KeyWrapper representing the upper key bound. The default is the end of the index
      *  @param start    (optional) The ordinal of the first result to deliver - the default is 0.
@@ -223,4 +225,32 @@ class KoMap<Value> internal constructor(private val store: Komodo, val name: Str
             throw UnknownIndexException(indexName)
         return Query(this, getIndex(indexName), lowerBound, upperBound, start, count, reverse)
     }
+
+    /**
+     *  Create a delete operation on this map using a specified index. The Query is a Flowable which can be subscribed to
+     *  to access the now deleted objects. Objects will be delivered in keyvalue order for the specified index. If both
+     *  key bounds and start/count values are provided, the start value is taken from the lower bound, i.e. the start and
+     *  count values limit results *within* the key bounds.
+     *
+     *  @param indexName    The name of the index to use. Must be one of the indices provided by the associated CODEC
+     *                      The default is the primary key index
+     *  @param lowerBound   A KeyWrapper the represents the lower key bound. No default
+     *  @param upperBound   A KeyWrapper representing the upper key bound. No default
+     *  @param start    (optional) The ordinal of the first result to deliver - the default is 0.
+     *  @param count    (optional) The maximum number of results to deliver - the default is all of them
+     *  @param reverse  IF true, the results will be delivered in reverse (descending) order. The default is false (ascending order)
+     */
+
+    fun delete(
+            indexName: String = primaryIndex.name,
+            lowerBound: KeyWrapper,
+            upperBound: KeyWrapper,
+            start: Int = 0,
+            count: Int = Integer.MAX_VALUE,
+            reverse: Boolean = false): Delete<Value> {
+        if (!indices.containsKey(indexName))
+            throw UnknownIndexException(indexName)
+        return Delete(this, getIndex(indexName), lowerBound, upperBound, start, count, reverse)
+    }
+
 }
