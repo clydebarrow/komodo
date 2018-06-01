@@ -19,14 +19,16 @@
 
 package com.controlj.komodo
 
+import io.reactivex.subscribers.TestSubscriber
 import org.junit.After
-import org.junit.Assert.*
+import org.junit.Assert.assertTrue
+import org.junit.Assert.fail
 import org.junit.Before
 import org.junit.Test
 
 class KoMapTest {
 
-    class Coder : Codec<String> {
+    class Coder : KoCodec<String> {
         override fun encode(data: String): ByteArray {
             return data.toByteArray()
         }
@@ -35,23 +37,23 @@ class KoMapTest {
             return String(encodedData)
         }
 
-        override val indices: List<Codec.Index<String>> = listOf<Codec.Index<String>>(
-                object : Codec.Index<String> {
+        override val indices: List<KoCodec.Index<String>> = listOf(
+                object : KoCodec.Index<String> {
                     override val name: String = "first"
-
-                    override val unique: Boolean = false
-
-                    override fun keyGen(data: String): KeyWrapper {
-                        return KeyWrapper(data)
-                    }
-                },
-                object : Codec.Index<String> {
-                    override val name: String = "second"
 
                     override val unique: Boolean = true
 
                     override fun keyGen(data: String): KeyWrapper {
-                        return KeyWrapper(data)
+                        return KeyWrapper("1." + data)
+                    }
+                },
+                object : KoCodec.Index<String> {
+                    override val name: String = "second"
+
+                    override val unique: Boolean = false
+
+                    override fun keyGen(data: String): KeyWrapper {
+                        return KeyWrapper("index2")
                     }
                 })
 
@@ -81,8 +83,7 @@ class KoMapTest {
         val map = komodo.koMap("test", Coder())
         val range = 0..10
         val inserted = range.map { it to map.insert("String $it") }.toMap()
-        range.forEach { assertTrue(inserted[it] == it + 1L) }
-        range.forEach { assertTrue(map.retrieve(inserted[it]!!) == "String $it") }
+        range.forEach { assertTrue(map.read(inserted[it]!!) == "String $it") }
         // test for invalid index name
         try {
             map.query("noname")
@@ -90,36 +91,36 @@ class KoMapTest {
         } catch (e: Exception) {
 
         }
-        var query = map.query("first")
-        query.count().subscribe({
-            assertEquals(range.count(), it.toInt())
-        }, {
-            fail(it.toString())
-        })
-        var cnt = 7
-        query = map.query("first", start = 2, count = 2, reverse = true)
-        query.subscribe({
-            assertEquals("String $cnt", it)
-            cnt--
-        }, {
-            fail(it.toString())
-        }, {
-            assertEquals(5, cnt)
-        })
-
-        listOf("first", "second").forEach { indexName ->
-            cnt = 3
-            query = map.query(indexName, lowerBound = KeyWrapper("String 10"), upperBound = KeyWrapper("String 8"), start = 2, count = 10)
-            query.subscribe({
-                //println("cnt = $cnt, result = $it")
-                assertEquals("String $cnt", it)
-                cnt++
-            }, {
-                fail(it.toString())
-            }, {
-                assertEquals(9, cnt)
-            })
+        run {
+            val query = map.query("first")
+            val subscriber = TestSubscriber<String>()
+            query.subscribe(subscriber)
+            subscriber.await()
+            subscriber.assertComplete()
+            subscriber.assertValueCount(11)
         }
 
+        run {
+            val query = map.query("first", start = 2, count = 2, reverse = true)
+            val subscriber = TestSubscriber<String>()
+            query.subscribe(subscriber)
+            subscriber.await()
+            subscriber.assertComplete()
+            subscriber.assertValueCount(2)
+            subscriber.assertValueAt(0, "String 7")
+            subscriber.assertValueAt(1, "String 6")
+        }
+
+        run {
+            val query = map.query("first", lowerBound = KeyWrapper("1.String 10"), upperBound = KeyWrapper("1.String 8"), start = 2, count = 10)
+            val subscriber = TestSubscriber<String>()
+            query.subscribe(subscriber)
+            subscriber.await()
+            subscriber.assertComplete()
+            subscriber.assertValueCount(6)
+            (3..8).forEachIndexed { index, i ->
+                subscriber.assertValueAt(index, "String $i")
+            }
+        }
     }
 }

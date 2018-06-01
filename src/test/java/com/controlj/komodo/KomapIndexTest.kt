@@ -20,15 +20,15 @@
 package com.controlj.komodo
 
 import org.junit.After
+import org.junit.Assert.assertTrue
+import org.junit.Assert.fail
 import org.junit.Before
-
-import org.junit.Assert.*
 import org.junit.Test
 import java.nio.ByteBuffer
 
 class KomapIndexTest {
 
-    class Coder: Codec<String> {
+    class Coder: KoCodec<String> {
         override fun encode(data: String): ByteArray {
             return data.toByteArray()
         }
@@ -37,12 +37,52 @@ class KomapIndexTest {
             return String(encodedData)
         }
 
-        override val indices: List<Codec.Index<String>>
+        override val indices: List<KoCodec.Index<String>>
             get() = listOf()
 
     }
 
-    class ListCoder: Codec<List<String>> {
+    class Coder1: KoCodec<String> {
+        override fun encode(data: String): ByteArray {
+            return data.toByteArray()
+        }
+
+        override fun decode(encodedData: ByteArray): String {
+            return String(encodedData)
+        }
+
+        override val indices: List<KoCodec.Index<String>> = listOf(
+        object : KoCodec.Index<String> {
+            override val name: String = "first"
+
+            override val unique: Boolean = false
+
+            override fun keyGen(data: String): KeyWrapper {
+                return KeyWrapper(data)
+            }
+        })
+    }
+    class Coder2: KoCodec<String> {
+        override fun encode(data: String): ByteArray {
+            return data.toByteArray()
+        }
+
+        override fun decode(encodedData: ByteArray): String {
+            return String(encodedData)
+        }
+
+        override val indices: List<KoCodec.Index<String>> = listOf(
+                object : KoCodec.Index<String> {
+                    override val name: String = "first"
+
+                    override val unique: Boolean = true
+
+                    override fun keyGen(data: String): KeyWrapper {
+                        return KeyWrapper(data)
+                    }
+                })
+    }
+    class ListCoder: KoCodec<List<String>> {
         override fun encode(data: List<String>): ByteArray {
             val total = data.size * Integer.SIZE + data.sumBy { it.toByteArray().size }
             val buffer = ByteBuffer.allocate(total)
@@ -66,7 +106,7 @@ class KomapIndexTest {
             return list
         }
 
-        override val indices: List<Codec.Index<List<String>>>
+        override val indices: List<KoCodec.Index<List<String>>>
             get() = TODO("not implemented") //To change initializer of created properties use File | Settings | File Templates.
 
     }
@@ -92,10 +132,19 @@ class KomapIndexTest {
         } catch (ex: IllegalArgumentException) {
 
         }
-        val map = komodo.koMap("test", Coder())
+        try {
+            komodo.koMap("test", Coder())
+            fail("Illegal index list not caught")
+        } catch (ex: IllegalArgumentException) {}
+
+        try {
+            komodo.koMap("test", Coder1())
+            fail("Illegal index list not caught")
+        } catch (ex: IllegalArgumentException) {}
+
+        val map = komodo.koMap("test", Coder2())
         val range = 0 .. 10
         val inserted = range.map{ it to map.insert("String $it") }.toMap()
-        range.forEach { assertTrue(inserted[it] == it+1L) }
-        range.forEach { assertTrue(map.retrieve(inserted[it]!!) == "String $it")  }
+        range.forEach { assertTrue(map.read(inserted[it]!!) == "String $it")  }
     }
 }

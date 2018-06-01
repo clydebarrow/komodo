@@ -19,19 +19,17 @@
 
 package com.controlj.komodo
 
-import io.reactivex.FlowableSubscriber
 import io.reactivex.schedulers.Schedulers
 import io.reactivex.subscribers.TestSubscriber
 import org.junit.After
-import org.junit.Assert.*
+import org.junit.Assert.assertEquals
 import org.junit.Before
 import org.junit.Test
-import org.reactivestreams.Subscription
 import java.util.concurrent.TimeUnit
 
 class DeleteTest {
 
-    class Coder : Codec<String> {
+    class Coder : KoCodec<String> {
         override fun encode(data: String): ByteArray {
             return data.toByteArray()
         }
@@ -40,8 +38,8 @@ class DeleteTest {
             return String(encodedData)
         }
 
-        override val indices: List<Codec.Index<String>> = listOf<Codec.Index<String>>(
-                object : Codec.Index<String> {
+        override val indices: List<KoCodec.Index<String>> = listOf<KoCodec.Index<String>>(
+                object : KoCodec.Index<String> {
                     override val name: String = "index"
 
                     override val unique: Boolean = true

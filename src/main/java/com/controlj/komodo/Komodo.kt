@@ -45,8 +45,12 @@ class Komodo(filename: String = "", compressed: Boolean = false, encryptionKey: 
 
     internal val transactionStore: TransactionStore by lazy { TransactionStore(store) }
 
-    fun <Value> koMap(name: String, codec: Codec<Value>): KoMap<Value> {
+    fun <Value> koMap(name: String, codec: KoCodec<Value>): KoMap<Value> {
         return KoMap(this, name, codec)
+    }
+
+    fun deleteMap(name: String) {
+        store.removeMap(name)
     }
 
     fun commit() {
@@ -54,8 +58,15 @@ class Komodo(filename: String = "", compressed: Boolean = false, encryptionKey: 
     }
 
     fun close() {
-        if(transactionStore.openTransactions.isNotEmpty())
+        if (transactionStore.openTransactions.isNotEmpty())
             throw KomodoException("Closing store with open transactions")
         store.close()
     }
+
+
 }
+
+val Int.Companion.BYTES: Int get() = 4
+val Float.Companion.BYTES: Int get() = 4
+val Double.Companion.BYTES: Int get() = 8
+val Long.Companion.BYTES: Int get() = 8

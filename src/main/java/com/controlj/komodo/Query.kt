@@ -40,34 +40,34 @@ import org.reactivestreams.Subscription
  * @param limit The maximum number of values to be emitted
  * @param reverse If set, the values will be emitted in reverse order, i.e. starting with the upperBound
  */
-class  Query<V> internal constructor(
+class Query<V> internal constructor(
         private val map: KoMap<V>,
-        private val index: MVMap<ByteArray, Long>,
+        private val index: MVMap<ByteArray, ByteArray>,
         private val lowerBound: KeyWrapper,
         private val upperBound: KeyWrapper,
         private val start: Int,
         private val limit: Int,
         private val reverse: Boolean
-        ): Flowable<V>() {
+) : Flowable<V>() {
 
 
     override fun subscribeActual(s: Subscriber<in V>) {
         val firstKey: ByteArray?
         val lastKey: ByteArray?
-        val upperKey = when(upperBound) {
+        val upperKey = when (upperBound) {
             KeyWrapper.END -> index.lastKey()
             KeyWrapper.START -> index.firstKey()
             else -> {
                 val last = index.ceilingKey(upperBound.byteArray)
-                if(upperBound.isPrefixOf(last)) last else index.lowerKey(last)
+                if (upperBound.isPrefixOf(last)) last else index.lowerKey(last)
             }
         }
-        val lowerKey = when(lowerBound) {
+        val lowerKey = when (lowerBound) {
             KeyWrapper.END -> index.lastKey()
             KeyWrapper.START -> index.firstKey()
             else -> index.ceilingKey(lowerBound.byteArray)
         }
-        if(reverse) {
+        if (reverse) {
             firstKey = upperKey
             lastKey = lowerKey
         } else {
@@ -75,7 +75,7 @@ class  Query<V> internal constructor(
             lastKey = upperKey
         }
 
-        s.onSubscribe(object: Subscription {
+        s.onSubscribe(object : Subscription {
             var cancelled = false
             var nextKey = firstKey
             var position = 0
@@ -86,16 +86,20 @@ class  Query<V> internal constructor(
 
             override fun request(n: Long) {
                 var count = n
-                while(count != 0L && !cancelled) {
-                    if(nextKey == null || position == start+limit) {
+                while (count != 0L && !cancelled) {
+                    if (nextKey == null || position == start + limit) {
                         s.onComplete()
                         return
                     }
-                    val primaryKey = index.get(nextKey)
-                    primaryKey?.apply {
-                        if(position >= start) {
-                            val value = map.retrieve(this)
-                            if(value != null) {
+                    val data = index.get(nextKey)
+                    if (data != null) {
+                        if (position >= start) {
+                            val value =
+                                    if (index != map.mvMap)
+                                        map.read(data)
+                                    else
+                                        map.codec.decode(data)
+                            if (value != null) {
                                 s.onNext(value)
                                 count--
                                 position++
@@ -103,21 +107,21 @@ class  Query<V> internal constructor(
                         } else
                             position++
                     }
-                    if(nextKey!!.equals(lastKey)) {
+                    if (nextKey!!.equals(lastKey)) {
                         s.onComplete()
                         return
                     }
                     // what if lastKey was removed from the index?
                     // check for exceeding bounds
-                    if(reverse) {
+                    if (reverse) {
                         nextKey = index.lowerKey(nextKey)
-                        if(!lowerBound.isPrefixOf(nextKey) && lowerBound.compareTo(nextKey) > 0) {
+                        if (!lowerBound.isPrefixOf(nextKey) && lowerBound.compareTo(nextKey) > 0) {
                             s.onComplete()
                             return
                         }
                     } else {
                         nextKey = index.higherKey(nextKey)
-                        if(!upperBound.isPrefixOf(nextKey) && upperBound.compareTo(nextKey) < 0) {
+                        if (!upperBound.isPrefixOf(nextKey) && upperBound.compareTo(nextKey) < 0) {
                             s.onComplete()
                             return
                         }

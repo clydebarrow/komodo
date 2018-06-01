@@ -26,7 +26,7 @@ package com.controlj.komodo
  * Date: 30/5/18
  * Time: 04:34
  */
-interface Codec<T> {
+interface KoCodec<T> {
     /**
      * Encode the data to a byte array
      */
@@ -66,7 +66,7 @@ interface Codec<T> {
          * @param data The object from which to generate the key
          * @return The generated key as a byte array
          */
-        fun keyGen(data: T) : KeyWrapper
+        fun keyGen(data: T): KeyWrapper
 
     }
 }
