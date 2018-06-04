@@ -19,6 +19,7 @@ package com.controlj.komodo
 
 import com.controlj.komodo.exceptions.DuplicateValueException
 import com.controlj.komodo.exceptions.UnknownIndexException
+import io.reactivex.Flowable
 import org.h2.mvstore.MVMap
 import java.util.concurrent.ConcurrentHashMap
 
@@ -162,6 +163,7 @@ class KoMap<Value> internal constructor(private val store: Komodo, val name: Str
             return
         delete(codec.decode(data), primaryKey)
     }
+
     internal fun delete(data: Value, primaryKey: KeyWrapper) {
         //val transaction = store.transactionStore.begin()
         indexList.forEach { index ->
@@ -200,7 +202,7 @@ class KoMap<Value> internal constructor(private val store: Komodo, val name: Str
     }
 
     /**
-     *  Create a query on this map using a specified index. The Query is a Flowable which can be subscribed to
+     *  Create a query on this map using a specified index. The returned value is an Iterator which can be subscribed to
      *  to access the returned objects. Objects will be delivered in keyvalue order for the specified index. If both
      *  key bounds and start/count values are provided, the start value is taken from the lower bound, i.e. the start and
      *  count values limit results *within* the key bounds.
@@ -220,10 +222,30 @@ class KoMap<Value> internal constructor(private val store: Komodo, val name: Str
             upperBound: KeyWrapper = KeyWrapper.END,
             start: Int = 0,
             count: Int = Integer.MAX_VALUE,
-            reverse: Boolean = false): Query<Value> {
+            reverse: Boolean = false): Iterator<Value> {
         if (!indices.containsKey(indexName))
             throw UnknownIndexException(indexName)
         return Query(this, getIndex(indexName), lowerBound, upperBound, start, count, reverse)
+    }
+
+    /**
+     * A Flowable version of the query
+     */
+
+    fun queryAsFlowable(
+            indexName: String = primaryIndex.name,
+            lowerBound: KeyWrapper = KeyWrapper.START,
+            upperBound: KeyWrapper = KeyWrapper.END,
+            start: Int = 0,
+            count: Int = Integer.MAX_VALUE,
+            reverse: Boolean = false): Flowable<Value> {
+        val q = query(indexName, lowerBound, upperBound, start, count, reverse)
+        return Flowable.generate { emitter ->
+            if (q.hasNext())
+                emitter.onNext(q.next())
+            else
+                emitter.onComplete()
+        }
     }
 
     /**
@@ -251,6 +273,24 @@ class KoMap<Value> internal constructor(private val store: Komodo, val name: Str
         if (!indices.containsKey(indexName))
             throw UnknownIndexException(indexName)
         return Delete(this, getIndex(indexName), lowerBound, upperBound, start, count, reverse)
+    }
+
+    /**
+     *  Count the number of entries in this map using a specified index, within given bounds.
+     *
+     *  @param indexName    The name of the index to use. Must be one of the indices provided by the associated CODEC
+     *                      The default is the primary key index
+     *  @param lowerBound   A KeyWrapper the represents the lower key bound. The default is the first key
+     *  @param upperBound   A KeyWrapper representing the upper key bound. The default is the last key
+     */
+
+    fun count(
+            indexName: String = primaryIndex.name,
+            lowerBound: KeyWrapper = KeyWrapper.START,
+            upperBound: KeyWrapper = KeyWrapper.END): Count {
+        if (!indices.containsKey(indexName))
+            throw UnknownIndexException(indexName)
+        return Count(this, getIndex(indexName), lowerBound, upperBound)
     }
 
 }

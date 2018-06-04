@@ -73,7 +73,7 @@ class DeleteTest {
         val range = 0..9
         val inserted = range.map { it to map.insert("String $it") }.toMap()
         assertEquals(10, inserted.size)
-        val query = map.query("index", upperBound = KeyWrapper("String 7")).subscribeOn(Schedulers.io())
+        val query = map.queryAsFlowable("index", upperBound = KeyWrapper("String 7")).subscribeOn(Schedulers.io())
         val subscriber = TestSubscriber<String>(4)
         query.subscribe(subscriber)
         subscriber.awaitCount(3)
@@ -91,7 +91,7 @@ class DeleteTest {
         val inserted = range.map { it to map.insert("String $it") }.toMap()
         assertEquals(10, inserted.size)
         map.delete(inserted[3]!!)
-        val query = map.query("index", upperBound = KeyWrapper("String 7")).subscribeOn(Schedulers.io())
+        val query = map.queryAsFlowable("index", upperBound = KeyWrapper("String 7")).subscribeOn(Schedulers.io())
         val subscriber = TestSubscriber<String>(4)
         query.subscribe(subscriber)
         subscriber.awaitCount(3)

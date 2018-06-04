@@ -19,10 +19,7 @@
 
 package com.controlj.komodo
 
-import io.reactivex.Flowable
 import org.h2.mvstore.MVMap
-import org.reactivestreams.Subscriber
-import org.reactivestreams.Subscription
 
 /**
  * Copyright (C) Control-J Pty. Ltd. ACN 103594190
@@ -48,12 +45,12 @@ class Query<V> internal constructor(
         private val start: Int,
         private val limit: Int,
         private val reverse: Boolean
-) : Flowable<V>() {
+) : Iterator<V> {
 
+    val firstKey: ByteArray?
+    val lastKey: ByteArray?
 
-    override fun subscribeActual(s: Subscriber<in V>) {
-        val firstKey: ByteArray?
-        val lastKey: ByteArray?
+    init {
         val upperKey = when (upperBound) {
             KeyWrapper.END -> index.lastKey()
             KeyWrapper.START -> index.firstKey()
@@ -74,61 +71,53 @@ class Query<V> internal constructor(
             firstKey = lowerKey
             lastKey = upperKey
         }
+    }
 
-        s.onSubscribe(object : Subscription {
-            var cancelled = false
-            var nextKey = firstKey
-            var position = 0
+    var nextKey = firstKey
+    var position = 0
+    override fun hasNext(): Boolean {
+        return nextKey != null && position != start + limit
+    }
 
-            override fun cancel() {
-                cancelled = true
-            }
+    override fun next(): V {
+        if (!hasNext())
+            throw NoSuchElementException()
+        var value: V? = null
+        do {
 
-            override fun request(n: Long) {
-                var count = n
-                while (count != 0L && !cancelled) {
-                    if (nextKey == null || position == start + limit) {
-                        s.onComplete()
-                        return
-                    }
-                    val data = index.get(nextKey)
-                    if (data != null) {
-                        if (position >= start) {
-                            val value =
-                                    if (index != map.mvMap)
-                                        map.read(data)
-                                    else
-                                        map.codec.decode(data)
-                            if (value != null) {
-                                s.onNext(value)
-                                count--
-                                position++
-                            }
-                        } else
-                            position++
-                    }
-                    if (nextKey!!.equals(lastKey)) {
-                        s.onComplete()
-                        return
-                    }
+
+            val data = index.get(nextKey)
+            if (data != null) {
+                if (position < start) {
+                    position++
+                } else {
+                    value =
+                            if (index != map.mvMap)
+                                map.read(data)
+                            else
+                                map.codec.decode(data)
+                }
+                if (nextKey!!.equals(lastKey)) {
+                    nextKey = null
+                } else {
                     // what if lastKey was removed from the index?
                     // check for exceeding bounds
                     if (reverse) {
                         nextKey = index.lowerKey(nextKey)
                         if (!lowerBound.isPrefixOf(nextKey) && lowerBound.compareTo(nextKey) > 0) {
-                            s.onComplete()
-                            return
+                            nextKey = null
                         }
                     } else {
                         nextKey = index.higherKey(nextKey)
                         if (!upperBound.isPrefixOf(nextKey) && upperBound.compareTo(nextKey) < 0) {
-                            s.onComplete()
-                            return
+                            nextKey = null
                         }
 
                     }
                 }
             }
-        })
+        } while(value == null)
+        position++
+        return value
     }
 }

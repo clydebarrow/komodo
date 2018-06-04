@@ -92,7 +92,7 @@ class KoMapTest {
 
         }
         run {
-            val query = map.query("first")
+            val query = map.queryAsFlowable("first")
             val subscriber = TestSubscriber<String>()
             query.subscribe(subscriber)
             subscriber.await()
@@ -101,7 +101,7 @@ class KoMapTest {
         }
 
         run {
-            val query = map.query("first", start = 2, count = 2, reverse = true)
+            val query = map.queryAsFlowable("first", start = 2, count = 2, reverse = true)
             val subscriber = TestSubscriber<String>()
             query.subscribe(subscriber)
             subscriber.await()
@@ -112,7 +112,7 @@ class KoMapTest {
         }
 
         run {
-            val query = map.query("first", lowerBound = KeyWrapper("1.String 10"), upperBound = KeyWrapper("1.String 8"), start = 2, count = 10)
+            val query = map.queryAsFlowable("first", lowerBound = KeyWrapper("1.String 10"), upperBound = KeyWrapper("1.String 8"), start = 2, count = 10)
             val subscriber = TestSubscriber<String>()
             query.subscribe(subscriber)
             subscriber.await()
