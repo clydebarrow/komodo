@@ -69,4 +69,12 @@ interface KoCodec<T> {
         fun keyGen(data: T): KeyWrapper
 
     }
+
+    interface SpatialIndex {
+        /**
+         * The name of the index
+         */
+
+        val name: String
+    }
 }
