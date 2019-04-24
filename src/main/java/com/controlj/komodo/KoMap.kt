@@ -222,10 +222,12 @@ class KoMap<Value> internal constructor(private val store: Komodo, val name: Str
             upperBound: KeyWrapper = KeyWrapper.END,
             start: Int = 0,
             count: Int = Integer.MAX_VALUE,
-            reverse: Boolean = false): Iterator<Value> {
+            reverse: Boolean = false): Iterable<Value> {
         if (!indices.containsKey(indexName))
             throw UnknownIndexException(indexName)
-        return Query(this, getIndex(indexName), lowerBound, upperBound, start, count, reverse)
+        return Iterable {
+            Query(this, getIndex(indexName), lowerBound, upperBound, start, count, reverse)
+        }
     }
 
     /**
@@ -240,12 +242,7 @@ class KoMap<Value> internal constructor(private val store: Komodo, val name: Str
             count: Int = Integer.MAX_VALUE,
             reverse: Boolean = false): Flowable<Value> {
         val q = query(indexName, lowerBound, upperBound, start, count, reverse)
-        return Flowable.generate { emitter ->
-            if (q.hasNext())
-                emitter.onNext(q.next())
-            else
-                emitter.onComplete()
-        }
+        return Flowable.fromIterable(q)
     }
 
     /**

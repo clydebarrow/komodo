@@ -73,8 +73,8 @@ class Query<V> internal constructor(
         }
     }
 
-    var nextKey = firstKey
-    var position = 0
+    private var nextKey = firstKey
+    private var position = 0
     override fun hasNext(): Boolean {
         return nextKey != null && position != start + limit
     }

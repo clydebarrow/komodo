@@ -28,7 +28,7 @@ import org.h2.mvstore.tx.TransactionStore
  * Date: 29/5/18
  * Time: 11:38
  */
-class Komodo(filename: String = "", compressed: Boolean = false, encryptionKey: String = "") {
+class Komodo(val filename: String = "", compressed: Boolean = false, encryptionKey: String = "") {
 
     internal val store: MVStore
 
