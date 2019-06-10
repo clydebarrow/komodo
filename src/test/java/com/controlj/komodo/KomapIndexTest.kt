@@ -29,11 +29,11 @@ import java.nio.ByteBuffer
 class KomapIndexTest {
 
     class Coder: KoCodec<String> {
-        override fun encode(data: String): ByteArray {
+        override fun encode(data: String, primaryKey: KeyWrapper): ByteArray {
             return data.toByteArray()
         }
 
-        override fun decode(encodedData: ByteArray): String {
+        override fun decode(encodedData: ByteArray, primaryKey: KeyWrapper?): String {
             return String(encodedData)
         }
 
@@ -43,11 +43,11 @@ class KomapIndexTest {
     }
 
     class Coder1: KoCodec<String> {
-        override fun encode(data: String): ByteArray {
+        override fun encode(data: String, primaryKey: KeyWrapper): ByteArray {
             return data.toByteArray()
         }
 
-        override fun decode(encodedData: ByteArray): String {
+        override fun decode(encodedData: ByteArray, primaryKey: KeyWrapper?): String {
             return String(encodedData)
         }
 
@@ -63,11 +63,11 @@ class KomapIndexTest {
         })
     }
     class Coder2: KoCodec<String> {
-        override fun encode(data: String): ByteArray {
+        override fun encode(data: String, primaryKey: KeyWrapper): ByteArray {
             return data.toByteArray()
         }
 
-        override fun decode(encodedData: ByteArray): String {
+        override fun decode(encodedData: ByteArray, primaryKey: KeyWrapper?): String {
             return String(encodedData)
         }
 
@@ -83,7 +83,7 @@ class KomapIndexTest {
                 })
     }
     class ListCoder: KoCodec<List<String>> {
-        override fun encode(data: List<String>): ByteArray {
+        override fun encode(data: List<String>, primaryKey: KeyWrapper): ByteArray {
             val total = data.size * Integer.SIZE + data.sumBy { it.toByteArray().size }
             val buffer = ByteBuffer.allocate(total)
             data.forEach{
@@ -94,11 +94,11 @@ class KomapIndexTest {
             return buffer.array()
         }
 
-        override fun decode(encodedData: ByteArray): List<String> {
+        override fun decode(encodedData: ByteArray, primaryKey: KeyWrapper?): List<String> {
             val buffer = ByteBuffer.wrap(encodedData)
             val list = ArrayList<String>()
             while(buffer.hasRemaining()) {
-                val length = buffer.getInt()
+                val length = buffer.int
                 val stringbuf = ByteArray(length)
                 buffer.get(stringbuf)
                 list.add(String(stringbuf))

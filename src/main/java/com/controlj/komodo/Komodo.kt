@@ -45,7 +45,7 @@ class Komodo(val filename: String = "", compressed: Boolean = false, encryptionK
 
     internal val transactionStore: TransactionStore by lazy { TransactionStore(store) }
 
-    fun <Value> koMap(name: String, codec: KoCodec<Value>): KoMap<Value> {
+    fun <Value: Any> koMap(name: String, codec: KoCodec<Value>): KoMap<Value> {
         return KoMap(this, name, codec)
     }
 

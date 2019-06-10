@@ -22,5 +22,4 @@ package com.controlj.komodo.exceptions
 /**
  * The superclass of all exceptions in Komodo
  */
-class UnknownIndexException(indexName: String): KomodoException("Unknown index $indexName") {
-}
+class UnknownIndexException(indexName: String): KomodoException("Unknown index $indexName")

@@ -22,5 +22,4 @@ package com.controlj.komodo.exceptions
 /**
  * The superclass of all exceptions in Komodo
  */
-class DuplicateValueException(indexName: String): KomodoException("Duplicate value in index $indexName") {
-}
+class DuplicateValueException(indexName: String): KomodoException("Duplicate value in index $indexName")

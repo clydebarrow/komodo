@@ -30,11 +30,11 @@ import java.util.concurrent.TimeUnit
 class DeleteTest {
 
     class Coder : KoCodec<String> {
-        override fun encode(data: String): ByteArray {
+        override fun encode(data: String, primaryKey: KeyWrapper): ByteArray {
             return data.toByteArray()
         }
 
-        override fun decode(encodedData: ByteArray): String {
+        override fun decode(encodedData: ByteArray, primaryKey: KeyWrapper?): String {
             return String(encodedData)
         }
 
@@ -51,7 +51,7 @@ class DeleteTest {
 
     }
 
-    lateinit var komodo: Komodo
+    private lateinit var komodo: Komodo
     @Before
     @Throws(Exception::class)
     fun setUp() {
@@ -77,7 +77,7 @@ class DeleteTest {
         val subscriber = TestSubscriber<String>(4)
         query.subscribe(subscriber)
         subscriber.awaitCount(3)
-        map.delete(inserted[7]!!)
+        map.delete(inserted[7] ?: error(""))
         subscriber.requestMore(100)
         subscriber.await(4, TimeUnit.SECONDS)
         subscriber.assertComplete()

@@ -29,11 +29,11 @@ import org.junit.Test
 class KoMapTest {
 
     class Coder : KoCodec<String> {
-        override fun encode(data: String): ByteArray {
+        override fun encode(data: String, primaryKey: KeyWrapper): ByteArray {
             return data.toByteArray()
         }
 
-        override fun decode(encodedData: ByteArray): String {
+        override fun decode(encodedData: ByteArray, primaryKey: KeyWrapper?): String {
             return String(encodedData)
         }
 

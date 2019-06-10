@@ -22,5 +22,4 @@ package com.controlj.komodo.exceptions
 /**
  * The superclass of all exceptions in Komodo
  */
-open class KomodoException(message: String): Exception(message) {
-}
+open class KomodoException(message: String): Exception(message)

@@ -40,7 +40,7 @@ import org.reactivestreams.Subscription
  * @param limit The maximum number of values to be emitted
  * @param reverse If set, the values will be emitted in reverse order, i.e. starting with the upperBound
  */
-class Delete<V> internal constructor(
+class Delete<V: Any> internal constructor(
         private val map: KoMap<V>,
         private val index: MVMap<ByteArray, ByteArray>,
         private val lowerBound: KeyWrapper,
@@ -57,10 +57,7 @@ class Delete<V> internal constructor(
         val upperKey = when (upperBound) {
             KeyWrapper.END -> index.lastKey()
             KeyWrapper.START -> index.firstKey()
-            else -> {
-                val last = index.ceilingKey(upperBound.byteArray)
-                if (upperBound.isPrefixOf(last)) last else index.lowerKey(last)
-            }
+            else -> index.floorKey(upperBound.byteArray)
         }
         val lowerKey = when (lowerBound) {
             KeyWrapper.END -> index.lastKey()
@@ -98,8 +95,8 @@ class Delete<V> internal constructor(
                             val primaryKey: KeyWrapper
                             val value: V?
                             if (index == map.mvMap) {
-                                value = map.codec.decode(data)
                                 primaryKey = KeyWrapper(nextKeyCopy)
+                                value = map.codec.decode(data, primaryKey)
                             } else {
                                 primaryKey = KeyWrapper(data)
                                 value = map.read(primaryKey)
@@ -113,7 +110,7 @@ class Delete<V> internal constructor(
                         } else
                             position++
                     }
-                    if (nextKeyCopy.equals(lastKey)) {
+                    if (nextKeyCopy.contentEquals(lastKey)) {
                         s.onComplete()
                         return
                     }

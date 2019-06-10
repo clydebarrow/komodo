@@ -19,8 +19,9 @@
 
 package com.controlj.komodo
 
+import org.threeten.bp.Instant
 import java.nio.ByteBuffer
-import java.nio.IntBuffer
+import java.nio.ByteOrder
 
 /**
  * Copyright (C) Control-J Pty. Ltd. ACN 103594190
@@ -38,14 +39,18 @@ open class KeyWrapper {
     constructor(byteArray: ByteArray) {
         this.byteArray = byteArray
     }
+
     constructor(buffer: ByteBuffer) : this(buffer.array())
 
     constructor(string: String) : this(string.toByteArray())
 
-    constructor(int: Int) {
-        val buffer = ByteBuffer.allocate(Integer.SIZE)
-        buffer.putInt(int)
-        byteArray = buffer.array()
+    override fun equals(other: Any?): Boolean {
+        if(this === other) return true
+        return other is KeyWrapper && byteArray.isNotEmpty() && byteArray.contentEquals(other.byteArray)
+    }
+
+    override fun hashCode(): Int {
+        return byteArray.sum()
     }
 
     /**
@@ -54,7 +59,7 @@ open class KeyWrapper {
      */
 
     fun isPrefixOf(other: ByteArray?): Boolean {
-        if(other == null)
+        if (other == null)
             return false
         if (other.size < byteArray.size)
             return false
@@ -87,6 +92,7 @@ open class KeyWrapper {
             return -1
         return 0
     }
+
     /**
      * Compare one key to another. Return <0, 0 or >0 depending on
      * whether this object is <, = or > the other respectively
@@ -95,10 +101,44 @@ open class KeyWrapper {
      */
 
     fun compareTo(other: KeyWrapper): Int {
+        if(other == START)
+            return 1
+        if(other == END)
+            return -1
         return compareTo(other.byteArray)
     }
 
     companion object {
+
+        /**
+         * Create a key from a number of primitive objects
+         * @param keys  The keys to be used. Will be stored in big-endian format, in the given order, so
+         *  the first key is the most significant.
+         */
+
+        fun of(vararg keys: Any): KeyWrapper {
+            if (keys.isEmpty())
+                return START
+            val size = keys.map {
+                when (it) {
+                    is Int -> Int.SIZE_BYTES
+                    is Long, is Instant -> Long.SIZE_BYTES
+                    is String -> it.toByteArray().size
+                    else -> throw IllegalArgumentException("Illegal key class ${it::class}")
+                }
+            }.sum()
+            val buffer = ByteBuffer.allocate(size).order(ByteOrder.BIG_ENDIAN)
+            keys.forEach {
+                when (it) {
+                    is Int -> buffer.putInt(it)
+                    is Long -> buffer.putLong(it)
+                    is Instant -> buffer.putLong(it.toEpochMilli())
+                    is String -> buffer.put(it.toByteArray())
+                    else -> Unit
+                }
+            }
+            return KeyWrapper(buffer)
+        }
         /**
          * Sentinel values used to represent the start and end of a KoMap
          */
@@ -126,4 +166,12 @@ open class KeyWrapper {
             }
         }
     }
+}
+
+fun ByteArray?.equals(other: ByteArray?): Boolean {
+    if (this === other)
+        return true
+    if (this == null || other == null)
+        return false
+    return contentEquals(other)
 }

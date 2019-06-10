@@ -37,7 +37,7 @@ import org.h2.mvstore.MVMap
  * @param limit The maximum number of values to be emitted
  * @param reverse If set, the values will be emitted in reverse order, i.e. starting with the upperBound
  */
-class Query<V> internal constructor(
+class Query<V : Any> internal constructor(
         private val map: KoMap<V>,
         private val index: MVMap<ByteArray, ByteArray>,
         private val lowerBound: KeyWrapper,
@@ -54,10 +54,7 @@ class Query<V> internal constructor(
         val upperKey = when (upperBound) {
             KeyWrapper.END -> index.lastKey()
             KeyWrapper.START -> index.firstKey()
-            else -> {
-                val last = index.ceilingKey(upperBound.byteArray)
-                if (upperBound.isPrefixOf(last)) last else index.lowerKey(last)
-            }
+            else -> index.floorKey(upperBound.byteArray)
         }
         val lowerKey = when (lowerBound) {
             KeyWrapper.END -> index.lastKey()
@@ -85,7 +82,6 @@ class Query<V> internal constructor(
         var value: V? = null
         do {
 
-
             val data = index.get(nextKey)
             if (data != null) {
                 if (position < start) {
@@ -93,11 +89,11 @@ class Query<V> internal constructor(
                 } else {
                     value =
                             if (index != map.mvMap)
-                                map.read(data)
+                                map.read(KeyWrapper(data))
                             else
-                                map.codec.decode(data)
+                                map.codec.decode(data, KeyWrapper(nextKey!!))
                 }
-                if (nextKey!!.equals(lastKey)) {
+                if (nextKey.equals(lastKey)) {
                     nextKey = null
                 } else {
                     // what if lastKey was removed from the index?
@@ -116,8 +112,10 @@ class Query<V> internal constructor(
                     }
                 }
             }
-        } while(value == null)
+        } while (value == null)
         position++
         return value
     }
 }
+
+

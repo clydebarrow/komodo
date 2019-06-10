@@ -21,6 +21,8 @@ import com.controlj.komodo.exceptions.DuplicateValueException
 import com.controlj.komodo.exceptions.UnknownIndexException
 import io.reactivex.Flowable
 import org.h2.mvstore.MVMap
+import org.h2.mvstore.rtree.MVRTreeMap
+import org.h2.mvstore.rtree.SpatialKey
 import java.util.concurrent.ConcurrentHashMap
 
 /**
@@ -30,19 +32,22 @@ import java.util.concurrent.ConcurrentHashMap
  *
  *  Create instances of this class by calling Komodo#koMap()
  *
- *  Multiple named indices may provided by the codec. The codec will calculate an index key for a given index name and object.
+ *  Multiple named indices may be provided by the codec. The codec will calculate an index key for a given index name and object.
  *  At least one index must be provided, and the first index in the list will be used as the primary key, so it must be unique
  *
  */
-class KoMap<Value> internal constructor(private val store: Komodo, val name: String, val codec: KoCodec<Value>) {
+class KoMap<Value : Any> internal constructor(private val store: Komodo, val name: String, val codec: KoCodec<Value>) {
     internal val mvMap: MVMap<ByteArray, ByteArray>
     private val primaryIndex: KoCodec.Index<Value>
     // lookup table for indices as provided by the codec
     private val indices = codec.indices.map { it.name to it }.toMap()
+    private val spatialIndices = codec.spatialIndices.map { it.name to it }.toMap()
     // the maps for each index, lazily populated
     private val indexMaps: ConcurrentHashMap<String, MVMap<ByteArray, ByteArray>> = ConcurrentHashMap()
+    private val spatialMaps: ConcurrentHashMap<String, MVRTreeMap<ByteArray>> = ConcurrentHashMap()
     // a copy of the index list for our benefit
     private val indexList: List<KoCodec.Index<Value>>
+    private val spatialList: List<KoCodec.SpatialIndex<Value>>
 
     init {
         if (name.contains('.'))
@@ -51,8 +56,12 @@ class KoMap<Value> internal constructor(private val store: Komodo, val name: Str
             throw IllegalArgumentException("At least one index is required")
         if (!codec.indices.first().unique)
             throw IllegalArgumentException("The primary index must be unique")
+        val indexNames = codec.indices.map { it.name }.plus(codec.spatialIndices.map { it.name })
+        if (indexNames != indexNames.distinct())
+            throw java.lang.IllegalArgumentException("Index names must be distinct")
         primaryIndex = codec.indices.first()
         indexList = codec.indices.subList(1, codec.indices.size)
+        spatialList = codec.spatialIndices.toList()
         mvMap = getIndex(primaryIndex.name)
     }
 
@@ -63,7 +72,16 @@ class KoMap<Value> internal constructor(private val store: Komodo, val name: Str
 
     private fun getIndex(indexName: String): MVMap<ByteArray, ByteArray> {
         return indexMaps.getOrPut(indexName, { store.store.openMap(fullIndexName(indexName)) })
+    }
 
+    /**
+     * Get the spatial index map for the given name
+     *
+     */
+
+    private fun getSpatialIndex(indexName: String): MVRTreeMap<ByteArray> {
+        return spatialMaps.getOrPut(indexName,
+                { store.store.openMap(fullIndexName(indexName), MVRTreeMap.Builder<ByteArray>()) })
     }
 
     /**
@@ -89,10 +107,14 @@ class KoMap<Value> internal constructor(private val store: Komodo, val name: Str
             }
             secKey.byteArray
         }.toList()
-        mvMap.put(primaryKey.byteArray, codec.encode(data))
+        mvMap[primaryKey.byteArray] = codec.encode(data, primaryKey)
         indexList.forEachIndexed { i, index ->
             val indexMap = getIndex(index.name)
-            indexMap.put(keyList[i], primaryKey.byteArray)
+            indexMap[keyList[i]] = primaryKey.byteArray
+        }
+        spatialList.forEach {
+            val spatialMap = getSpatialIndex(it.name)
+            spatialMap.add(it.keyGen(data), primaryKey.byteArray)
         }
         return primaryKey
     }
@@ -101,17 +123,10 @@ class KoMap<Value> internal constructor(private val store: Komodo, val name: Str
      * Retrieve an object by primary key
      *
      */
-    fun read(key: ByteArray): Value? {
-        val data = mvMap.get(key)
-        if (data != null) {
-            val result = codec.decode(data)
-            return result
+    fun read(primaryKey: KeyWrapper): Value? {
+        return mvMap[primaryKey.byteArray]?.let {
+            codec.decode(it, primaryKey)
         }
-        return null
-    }
-
-    fun read(key: KeyWrapper): Value? {
-        return read(key.byteArray)
     }
 
     /**
@@ -135,18 +150,27 @@ class KoMap<Value> internal constructor(private val store: Komodo, val name: Str
 
     fun update(value: Value): KeyWrapper {
         val primaryKey = primaryIndex.keyGen(value)
-        val oldData = mvMap.get(primaryKey.byteArray)
-        if (oldData == null)
-            return insert(value)
-        val oldValue = codec.decode(oldData)
-        mvMap.put(primaryKey.byteArray, codec.encode(value))
-        indexList.forEach { index ->
-            val indexMap = getIndex(index.name)
-            val oldKey = getKey(index, oldValue, primaryKey)
-            val newKey = getKey(index, value, primaryKey)
-            if (newKey.compareTo(oldKey) != 0) {
-                indexMap.remove(oldKey.byteArray)
-                indexMap.put(newKey.byteArray, primaryKey.byteArray)
+        val oldData = mvMap[primaryKey.byteArray] ?: return insert(value)
+        mvMap[primaryKey.byteArray] = codec.encode(value, primaryKey)
+        if(indexList.isNotEmpty() || spatialList.isNotEmpty()) {
+            val oldValue = codec.decode(oldData)
+            indexList.forEach { index ->
+                val indexMap = getIndex(index.name)
+                val oldKey = getKey(index, oldValue, primaryKey)
+                val newKey = getKey(index, value, primaryKey)
+                if (newKey.compareTo(oldKey) != 0) {
+                    indexMap.remove(oldKey.byteArray)
+                    indexMap[newKey.byteArray] = primaryKey.byteArray
+                }
+            }
+            spatialList.forEach { index ->
+                val spatialMap = getSpatialIndex(index.name)
+                val newKey = index.keyGen(value)
+                val oldKey = index.keyGen(oldValue)
+                if (newKey != oldKey) {
+                    spatialMap.remove(oldKey)
+                    spatialMap.add(newKey, primaryKey.byteArray)
+                }
             }
         }
         return primaryKey
@@ -158,10 +182,9 @@ class KoMap<Value> internal constructor(private val store: Komodo, val name: Str
      */
 
     fun delete(primaryKey: KeyWrapper) {
-        val data = mvMap.get(primaryKey.byteArray)
-        if (data == null)
-            return
-        delete(codec.decode(data), primaryKey)
+        mvMap[primaryKey.byteArray]?.apply {
+            delete(codec.decode(this), primaryKey)
+        }
     }
 
     internal fun delete(data: Value, primaryKey: KeyWrapper) {
@@ -169,6 +192,11 @@ class KoMap<Value> internal constructor(private val store: Komodo, val name: Str
         indexList.forEach { index ->
             val indexMap = store.store.openMap<ByteArray, Long>(fullIndexName(index.name))
             indexMap.remove(getKey(index, data, primaryKey).byteArray)
+        }
+        spatialList.forEach { index ->
+            val spatialMap = getSpatialIndex(index.name)
+            val key = index.keyGen(data)
+            spatialMap.remove(key)
         }
         //val valueMap = transaction.openMap<Long, ByteArray>(mvMap.name)
         mvMap.remove(primaryKey.byteArray)
@@ -288,6 +316,41 @@ class KoMap<Value> internal constructor(private val store: Komodo, val name: Str
         if (!indices.containsKey(indexName))
             throw UnknownIndexException(indexName)
         return Count(this, getIndex(indexName), lowerBound, upperBound)
+    }
+
+    /**
+     *  Create a spatial query on this map using a specified index. The returned value is an Iterator which can be subscribed to
+     *  to access the returned spatial keys
+     *
+     *  @param indexName    The name of the index to use. Must be one of the spatial indices provided by the associated CODEC
+     *  @param minX   minimum X bound
+     *  @param maxX   maximum X bound
+     *  @param minY   minimum Y bound
+     *  @param maxY   maximum Y bound
+     *  @return an Iterator
+     */
+
+    fun containedBy(
+            indexName: String = primaryIndex.name,
+            minX: Float,
+            maxX: Float,
+            minY: Float,
+            maxY: Float
+
+    ): Iterable<SpatialKey> {
+        return containedBy(indexName, SpatialKey(0, minX, maxX, minY, maxY))
+    }
+
+    fun containedBy(
+            indexName: String = primaryIndex.name,
+            key: SpatialKey
+    ): Iterable<SpatialKey> {
+        if (!spatialIndices.containsKey(indexName))
+            throw UnknownIndexException(indexName)
+        val map = getSpatialIndex(indexName)
+        return Iterable {
+            map.findContainedKeys(key)
+        }
     }
 
 }
