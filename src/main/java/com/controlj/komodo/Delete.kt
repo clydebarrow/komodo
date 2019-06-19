@@ -40,7 +40,7 @@ import org.reactivestreams.Subscription
  * @param limit The maximum number of values to be emitted
  * @param reverse If set, the values will be emitted in reverse order, i.e. starting with the upperBound
  */
-class Delete<V: Any> internal constructor(
+class Delete<V : Any> internal constructor(
         private val map: KoMap<V>,
         private val index: MVMap<ByteArray, ByteArray>,
         private val lowerBound: KeyWrapper,
@@ -48,10 +48,9 @@ class Delete<V: Any> internal constructor(
         private val start: Int,
         private val limit: Int,
         private val reverse: Boolean
-) : Flowable<V>() {
+) : Flowable<KeyWrapper>() {
 
-
-    override fun subscribeActual(s: Subscriber<in V>) {
+    override fun subscribeActual(s: Subscriber<in KeyWrapper>) {
         val firstKey: ByteArray?
         val lastKey: ByteArray?
         val upperKey = when (upperBound) {
@@ -89,24 +88,19 @@ class Delete<V: Any> internal constructor(
                         s.onComplete()
                         return
                     }
-                    val data = index.get(nextKeyCopy)
+                    val data = index[nextKeyCopy]
                     if (data != null) {
                         if (position >= start) {
                             val primaryKey: KeyWrapper
-                            val value: V?
-                            if (index == map.mvMap) {
-                                primaryKey = KeyWrapper(nextKeyCopy)
-                                value = map.codec.decode(data, primaryKey)
+                            primaryKey = if (index == map.mvMap) {
+                                KeyWrapper(nextKeyCopy)
                             } else {
-                                primaryKey = KeyWrapper(data)
-                                value = map.read(primaryKey)
+                                KeyWrapper(data)
                             }
-                            if (value != null) {
-                                map.delete(value, primaryKey)
-                                s.onNext(value)
-                                count--
-                                position++
-                            }
+                            map.delete(primaryKey)
+                            s.onNext(primaryKey)
+                            count--
+                            position++
                         } else
                             position++
                     }

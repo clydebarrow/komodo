@@ -30,10 +30,11 @@ import org.h2.mvstore.tx.TransactionStore
  */
 class Komodo(val filename: String = "", compressed: Boolean = false, encryptionKey: String = "") {
 
-    internal val store: MVStore
+    internal var store: MVStore
+    internal val builder: MVStore.Builder
 
     init {
-        val builder = MVStore.Builder()
+        builder = MVStore.Builder()
         if (filename.isNotBlank())
             builder.fileName(filename)
         if (compressed)
@@ -41,6 +42,11 @@ class Komodo(val filename: String = "", compressed: Boolean = false, encryptionK
         if (encryptionKey.isNotBlank())
             builder.encryptionKey(encryptionKey.toCharArray())
         store = builder.open()
+    }
+
+    fun open() {
+        if(store.isClosed)
+            store = builder.open()
     }
 
     internal val transactionStore: TransactionStore by lazy { TransactionStore(store) }
@@ -53,6 +59,11 @@ class Komodo(val filename: String = "", compressed: Boolean = false, encryptionK
         store.removeMap(name)
     }
 
+    val mapNames: Set<String>
+        get() {
+            return store.mapNames
+        }
+
     fun commit() {
         store.commit()
     }
@@ -62,11 +73,4 @@ class Komodo(val filename: String = "", compressed: Boolean = false, encryptionK
             throw KomodoException("Closing store with open transactions")
         store.close()
     }
-
-
 }
-
-val Int.Companion.BYTES: Int get() = 4
-val Float.Companion.BYTES: Int get() = 4
-val Double.Companion.BYTES: Int get() = 8
-val Long.Companion.BYTES: Int get() = 8

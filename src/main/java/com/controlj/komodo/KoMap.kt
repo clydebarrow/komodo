@@ -152,7 +152,7 @@ class KoMap<Value : Any> internal constructor(private val store: Komodo, val nam
         val primaryKey = primaryIndex.keyGen(value)
         val oldData = mvMap[primaryKey.byteArray] ?: return insert(value)
         mvMap[primaryKey.byteArray] = codec.encode(value, primaryKey)
-        if(indexList.isNotEmpty() || spatialList.isNotEmpty()) {
+        if (indexList.isNotEmpty() || spatialList.isNotEmpty()) {
             val oldValue = codec.decode(oldData)
             indexList.forEach { index ->
                 val indexMap = getIndex(index.name)
@@ -181,25 +181,26 @@ class KoMap<Value : Any> internal constructor(private val store: Komodo, val nam
      * @param primaryKey The primary key for the data
      */
 
-    fun delete(primaryKey: KeyWrapper) {
-        mvMap[primaryKey.byteArray]?.apply {
-            delete(codec.decode(this), primaryKey)
-        }
-    }
 
-    internal fun delete(data: Value, primaryKey: KeyWrapper) {
-        //val transaction = store.transactionStore.begin()
-        indexList.forEach { index ->
-            val indexMap = store.store.openMap<ByteArray, Long>(fullIndexName(index.name))
-            indexMap.remove(getKey(index, data, primaryKey).byteArray)
-        }
-        spatialList.forEach { index ->
-            val spatialMap = getSpatialIndex(index.name)
-            val key = index.keyGen(data)
-            spatialMap.remove(key)
+    fun delete(primaryKey: KeyWrapper) {
+        mvMap[primaryKey.byteArray]?.let { obj ->
+
+            //val transaction = store.transactionStore.begin()
+            if (indexList.isNotEmpty() || spatialList.isNotEmpty()) {
+                val data = codec.decode(obj)
+                indexList.forEach { index ->
+                    val indexMap = store.store.openMap<ByteArray, Long>(fullIndexName(index.name))
+                    indexMap.remove(getKey(index, data, primaryKey).byteArray)
+                }
+                spatialList.forEach { index ->
+                    val spatialMap = getSpatialIndex(index.name)
+                    val key = index.keyGen(data)
+                    spatialMap.remove(key)
+                }
+            }
+            mvMap.remove(primaryKey.byteArray)
         }
         //val valueMap = transaction.openMap<Long, ByteArray>(mvMap.name)
-        mvMap.remove(primaryKey.byteArray)
         //transaction.commit()
     }
 
