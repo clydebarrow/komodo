@@ -122,5 +122,16 @@ class KoMapTest {
                 subscriber.assertValueAt(index, "String $i")
             }
         }
+        run {
+            val query = map.queryAsFlowable("first", lowerBound = KeyWrapper("1.String 10"), upperBound = KeyWrapper("1.String 8"), start = 2, count = 10, stride = 2)
+            val subscriber = TestSubscriber<String>()
+            query.subscribe(subscriber)
+            subscriber.await()
+            subscriber.assertComplete()
+            subscriber.assertValueCount(3)
+            (3..5).forEachIndexed { index, i ->
+                subscriber.assertValueAt(index, "String ${index*2+3}")
+            }
+        }
     }
 }

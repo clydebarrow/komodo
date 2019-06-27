@@ -32,6 +32,7 @@ class Komodo(val filename: String = "", compressed: Boolean = false, encryptionK
 
     internal var store: MVStore
     internal val builder: MVStore.Builder
+    internal val mapList = mutableListOf<KoMap<out Any>>()
 
     init {
         builder = MVStore.Builder()
@@ -49,20 +50,22 @@ class Komodo(val filename: String = "", compressed: Boolean = false, encryptionK
             store = builder.open()
     }
 
+    fun getMaps(): List<KoMap<out Any>> {
+        return mapList.toList()
+    }
+
     internal val transactionStore: TransactionStore by lazy { TransactionStore(store) }
 
+    fun rollbackTo(version: Long) {
+        store.rollbackTo(version)
+    }
     fun <Value: Any> koMap(name: String, codec: KoCodec<Value>): KoMap<Value> {
-        return KoMap(this, name, codec)
+        return KoMap(this, name, codec).also { mapList.add(it) }
     }
 
     fun deleteMap(name: String) {
         store.removeMap(name)
     }
-
-    val mapNames: Set<String>
-        get() {
-            return store.mapNames
-        }
 
     fun commit() {
         store.commit()

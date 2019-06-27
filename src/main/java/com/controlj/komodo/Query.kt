@@ -36,6 +36,7 @@ import org.h2.mvstore.MVMap
  * @param start    A start position - this many values will be skipped before any are emitted
  * @param limit The maximum number of values to be emitted
  * @param reverse If set, the values will be emitted in reverse order, i.e. starting with the upperBound
+ * @param stride the key interval; 1 means return every entry, 2 means return every second entry etc.
  */
 class Query<V : Any> internal constructor(
         private val map: KoMap<V>,
@@ -44,13 +45,16 @@ class Query<V : Any> internal constructor(
         private val upperBound: KeyWrapper,
         private val start: Int,
         private val limit: Int,
-        private val reverse: Boolean
+        private val reverse: Boolean,
+        private val stride: Int = 1
 ) : Iterator<V> {
 
     val firstKey: ByteArray?
     val lastKey: ByteArray?
 
     init {
+        if (stride <= 0)
+            throw IllegalArgumentException("Stride must be > 0")
         val upperKey = when (upperBound) {
             KeyWrapper.END -> index.lastKey()
             KeyWrapper.START -> index.firstKey()
@@ -81,39 +85,42 @@ class Query<V : Any> internal constructor(
             throw NoSuchElementException()
         var value: V? = null
         do {
-
             val data = index.get(nextKey)
             if (data != null) {
                 if (position < start) {
                     position++
                 } else {
-                    value =
-                            if (index != map.mvMap)
-                                map.read(KeyWrapper(data))
-                            else
-                                map.codec.decode(data, KeyWrapper(nextKey!!))
+                    value = if (index != map.mvMap)
+                        map.read(KeyWrapper(data))
+                    else
+                        map.codec.decode(data, KeyWrapper(nextKey!!))
                 }
-                if (nextKey.equals(lastKey)) {
-                    nextKey = null
-                } else {
-                    // what if lastKey was removed from the index?
-                    // check for exceeding bounds
-                    if (reverse) {
-                        nextKey = index.lowerKey(nextKey)
-                        if (!lowerBound.isPrefixOf(nextKey) && lowerBound.compareTo(nextKey) > 0) {
-                            nextKey = null
-                        }
+                repeat(if (value == null) 1 else stride) {
+                    if (nextKey.equals(lastKey)) {
+                        nextKey = null
                     } else {
-                        nextKey = index.higherKey(nextKey)
-                        if (!upperBound.isPrefixOf(nextKey) && upperBound.compareTo(nextKey) < 0) {
-                            nextKey = null
+                        // what if lastKey was removed from the index?
+                        // check for exceeding bounds
+                        if (reverse) {
+                            nextKey = index.lowerKey(nextKey)
+                            if (!lowerBound.isPrefixOf(nextKey) && lowerBound.compareTo(nextKey) > 0) {
+                                nextKey = null
+                            }
+                        } else {
+                            nextKey = index.higherKey(nextKey)
+                            if (!upperBound.isPrefixOf(nextKey) && upperBound.compareTo(nextKey) < 0) {
+                                nextKey = null
+                            }
                         }
-
                     }
+                    if (nextKey == null)
+                        return@repeat
                 }
             }
-        } while (value == null)
+        } while (value == null && nextKey != null)
         position++
+        if(value == null)
+            throw NoSuchElementException("Unexpected failure to find next element")
         return value
     }
 }

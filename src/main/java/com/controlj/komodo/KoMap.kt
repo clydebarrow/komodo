@@ -97,13 +97,13 @@ class KoMap<Value : Any> internal constructor(private val store: Komodo, val nam
     fun insert(data: Value): KeyWrapper {
         val primaryKey = primaryIndex.keyGen(data)
         if (mvMap.containsKey(primaryKey.byteArray))
-            throw DuplicateValueException("Duplicate value for index ${primaryIndex.name}")
+            throw DuplicateValueException(primaryIndex.name)
         val keyList = indexList.map { index ->
             val secKey = index.keyGen(data)
             if (index.unique) {
                 val indexMap = getIndex(index.name)
                 if (indexMap.containsKey(secKey.byteArray))
-                    throw DuplicateValueException("Duplicate value for index ${index.name}")
+                    throw DuplicateValueException(index.name)
             }
             secKey.byteArray
         }.toList()
@@ -181,7 +181,6 @@ class KoMap<Value : Any> internal constructor(private val store: Komodo, val nam
      * @param primaryKey The primary key for the data
      */
 
-
     fun delete(primaryKey: KeyWrapper) {
         mvMap[primaryKey.byteArray]?.let { obj ->
 
@@ -243,6 +242,7 @@ class KoMap<Value : Any> internal constructor(private val store: Komodo, val nam
      *  @param start    (optional) The ordinal of the first result to deliver - the default is 0.
      *  @param count    (optional) The maximum number of results to deliver - the default is all of them
      *  @param reverse  IF true, the results will be delivered in reverse (descending) order. The default is false (ascending order)
+     *  @param stride   Return only every n'th element. Default is 1 - i.e. return every element
      */
 
     fun query(
@@ -251,11 +251,13 @@ class KoMap<Value : Any> internal constructor(private val store: Komodo, val nam
             upperBound: KeyWrapper = KeyWrapper.END,
             start: Int = 0,
             count: Int = Integer.MAX_VALUE,
-            reverse: Boolean = false): Iterable<Value> {
+            reverse: Boolean = false,
+            stride: Int = 1
+    ): Iterable<Value> {
         if (!indices.containsKey(indexName))
             throw UnknownIndexException(indexName)
         return Iterable {
-            Query(this, getIndex(indexName), lowerBound, upperBound, start, count, reverse)
+            Query(this, getIndex(indexName), lowerBound, upperBound, start, count, reverse, stride)
         }
     }
 
@@ -269,8 +271,10 @@ class KoMap<Value : Any> internal constructor(private val store: Komodo, val nam
             upperBound: KeyWrapper = KeyWrapper.END,
             start: Int = 0,
             count: Int = Integer.MAX_VALUE,
-            reverse: Boolean = false): Flowable<Value> {
-        val q = query(indexName, lowerBound, upperBound, start, count, reverse)
+            reverse: Boolean = false,
+            stride: Int = 1
+    ): Flowable<Value> {
+        val q = query(indexName, lowerBound, upperBound, start, count, reverse, stride)
         return Flowable.fromIterable(q)
     }
 
@@ -299,6 +303,14 @@ class KoMap<Value : Any> internal constructor(private val store: Komodo, val nam
         if (!indices.containsKey(indexName))
             throw UnknownIndexException(indexName)
         return Delete(this, getIndex(indexName), lowerBound, upperBound, start, count, reverse)
+    }
+
+    /**
+     * Delete all from this map
+     */
+
+    fun deleteAll(): Delete<Value> {
+        return delete(lowerBound = KeyWrapper.START, upperBound = KeyWrapper.END)
     }
 
     /**
@@ -353,5 +365,4 @@ class KoMap<Value : Any> internal constructor(private val store: Komodo, val nam
             map.findContainedKeys(key)
         }
     }
-
 }
