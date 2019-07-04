@@ -129,7 +129,7 @@ class KoMapTest {
             subscriber.await()
             subscriber.assertComplete()
             subscriber.assertValueCount(3)
-            (3..5).forEachIndexed { index, i ->
+            (3..5).forEachIndexed { index, _ ->
                 subscriber.assertValueAt(index, "String ${index*2+3}")
             }
         }
