@@ -77,7 +77,18 @@ class Query<V : Any> internal constructor(
     private var nextKey = firstKey
     private var position = 0
     override fun hasNext(): Boolean {
-        return nextKey != null && position != start + limit
+        if(position == start + limit)
+            return false
+        nextKey?.let {
+            if(lastKey == null)
+                return false
+            if(reverse && it.compareTo(lastKey) < 0)
+                return false
+            if(!reverse && it.compareTo(lastKey) > 0)
+                return false
+            return true
+        }
+        return false
     }
 
     override fun next(): V {

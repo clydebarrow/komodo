@@ -45,7 +45,7 @@ open class KeyWrapper {
     constructor(string: String) : this(string.toByteArray())
 
     override fun equals(other: Any?): Boolean {
-        if(this === other) return true
+        if (this === other) return true
         return other is KeyWrapper && byteArray.isNotEmpty() && byteArray.contentEquals(other.byteArray)
     }
 
@@ -80,17 +80,7 @@ open class KeyWrapper {
     open fun compareTo(other: ByteArray?): Int {
         if (other == null)
             return 1
-        byteArray.forEachIndexed { index, byte ->
-            // if we are longer, we are bigger at this point
-            if (index == other.size)
-                return 1
-            val ob = other[index]
-            if (ob != byte) return byte - ob
-        }
-        // we are a prefix or equal. So...
-        if (other.size > byteArray.size)
-            return -1
-        return 0
+        return byteArray.compareTo(other)
     }
 
     /**
@@ -101,9 +91,9 @@ open class KeyWrapper {
      */
 
     fun compareTo(other: KeyWrapper): Int {
-        if(other == START)
+        if (other == START)
             return 1
-        if(other == END)
+        if (other == END)
             return -1
         return compareTo(other.byteArray)
     }
@@ -166,6 +156,22 @@ open class KeyWrapper {
             }
         }
     }
+}
+
+fun ByteArray.compareTo(other: ByteArray?): Int {
+    if(other == null)
+        return 1
+    forEachIndexed { index, byte ->
+        // if we are longer, we are bigger at this point
+        if (index == other.size)
+            return 1
+        val ob = other[index]
+        if (ob != byte) return byte - ob
+    }
+    // we are a prefix or equal. So...
+    if (other.size > size)
+        return -1
+    return 0
 }
 
 fun ByteArray?.equals(other: ByteArray?): Boolean {
