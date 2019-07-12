@@ -224,8 +224,8 @@ class KoMap<Value : Any> internal constructor(private val store: Komodo, val nam
 
     private fun addPrimaryKey(keyValue: KeyWrapper, primaryKey: KeyWrapper): KeyWrapper {
         val key = ByteArray(keyValue.byteArray.size + primaryKey.byteArray.size)
-        System.arraycopy(keyValue, 0, key, 0, keyValue.byteArray.size)
-        System.arraycopy(primaryKey, keyValue.byteArray.size, key, 0, primaryKey.byteArray.size)
+        System.arraycopy(keyValue.byteArray, 0, key, 0, keyValue.byteArray.size)
+        System.arraycopy(primaryKey.byteArray, 0, key, keyValue.byteArray.size, primaryKey.byteArray.size)
         return KeyWrapper(key)
     }
 

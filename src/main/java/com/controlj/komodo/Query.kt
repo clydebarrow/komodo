@@ -51,6 +51,8 @@ class Query<V : Any> internal constructor(
 
     val firstKey: ByteArray?
     val lastKey: ByteArray?
+    private var nextKey: ByteArray? = null
+    private var position = 0
 
     init {
         if (stride <= 0)
@@ -72,66 +74,55 @@ class Query<V : Any> internal constructor(
             firstKey = lowerKey
             lastKey = upperKey
         }
+        if (lastKey != null) {
+            nextKey = firstKey
+            while(position < start && nextKey != null)
+                skipToNextKey()
+        }
     }
 
-    private var nextKey = firstKey
-    private var position = 0
     override fun hasNext(): Boolean {
-        if(position == start + limit)
-            return false
-        nextKey?.let {
-            if(lastKey == null)
-                return false
-            if(reverse && it.compareTo(lastKey) < 0)
-                return false
-            if(!reverse && it.compareTo(lastKey) > 0)
-                return false
-            return true
+        return nextKey != null && position < start + limit
+    }
+
+    // move the key position to the next key in the desired sequence.
+    private fun skipToNextKey() {
+        // are we already at the end?
+        if (nextKey == null)
+            return
+        // have we reached the end, either by query limits or count?
+        if (position >= start + limit || nextKey.equals(lastKey)) {
+            nextKey = null
+            return
         }
-        return false
+        // get next key and compare to upper key bound
+        if (reverse) {
+            nextKey = index.lowerKey(nextKey)
+            if (lowerBound.compareTo(nextKey) > 0) {
+                nextKey = null
+            }
+        } else {
+            nextKey = index.higherKey(nextKey)
+            if (upperBound.compareTo(nextKey) < 0) {
+                nextKey = null
+            }
+        }
+        if (nextKey != null)
+            position++
     }
 
     override fun next(): V {
         if (!hasNext())
             throw NoSuchElementException()
-        var value: V? = null
-        do {
-            val data = index.get(nextKey)
-            if (data != null) {
-                if (position < start) {
-                    position++
-                } else {
-                    value = if (index != map.mvMap)
-                        map.read(KeyWrapper(data))
-                    else
-                        map.codec.decode(data, KeyWrapper(nextKey!!))
-                }
-                repeat(if (value == null) 1 else stride) {
-                    if (nextKey.equals(lastKey)) {
-                        nextKey = null
-                    } else {
-                        // what if lastKey was removed from the index?
-                        // check for exceeding bounds
-                        if (reverse) {
-                            nextKey = index.lowerKey(nextKey)
-                            if (!lowerBound.isPrefixOf(nextKey) && lowerBound.compareTo(nextKey) > 0) {
-                                nextKey = null
-                            }
-                        } else {
-                            nextKey = index.higherKey(nextKey)
-                            if (!upperBound.isPrefixOf(nextKey) && upperBound.compareTo(nextKey) < 0) {
-                                nextKey = null
-                            }
-                        }
-                    }
-                    if (nextKey == null)
-                        return@repeat
-                }
-            }
-        } while (value == null && nextKey != null)
-        position++
-        if(value == null)
-            throw NoSuchElementException("Unexpected failure to find next element")
+        val value: V = (index.get(nextKey))?.let {
+            if (index != map.mvMap)
+                map.read(KeyWrapper(it))
+            else
+                map.codec.decode(it, KeyWrapper(nextKey!!))
+
+        } ?: throw NoSuchElementException(
+                "Unexpected failure to find next element, position=$position, limit=${start + limit}")
+        repeat(stride) { skipToNextKey() }
         return value
     }
 }
