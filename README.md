@@ -34,7 +34,6 @@ dependencies {
 ````
 
 A sample class follows:
-package com.controlj.data
 
 ````
 import com.controlj.komodo.KeyWrapper
