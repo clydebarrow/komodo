@@ -1,27 +1,45 @@
 buildscript {
     ext.kotlinVersion = '1.3.50'
+    ext.dokkaVersion = "0.10.0"
 
     repositories {
         jcenter()
+        google()
     }
     dependencies {
         classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlinVersion"
+        classpath "org.jetbrains.dokka:dokka-gradle-plugin:$dokkaVersion"
+        classpath 'digital.wup:android-maven-publish:3.6.2'
     }
 }
 
-apply plugin: 'java'
-apply plugin: 'idea'
-apply plugin: 'kotlin'
-apply plugin: 'signing'
-apply plugin: 'maven-publish'
+plugins {
+    id 'java'
+    id 'idea'
+    id 'signing'
+    id 'maven-publish'
+    id 'com.github.johnrengelman.shadow' version '5.1.0'
 
+}
+
+apply plugin: 'kotlin'
+apply plugin: 'org.jetbrains.dokka'
 
 group 'com.control-j'
-version '1.0.0-SNAPSHOT'
+version '1.0.1'
 archivesBaseName = 'komodo'
 
-
 sourceCompatibility = 1.8
+
+task javadocJar(type: Jar) {
+    from dokka
+    archiveClassifier = 'javadoc'
+}
+
+dokka {
+    outputFormat = 'html'
+    outputDirectory = "$buildDir/dokka"
+}
 
 idea {
     module {
@@ -33,67 +51,45 @@ idea {
 
 repositories {
     mavenCentral()
-}
-
-javadoc {
-	options.memberLevel = org.gradle.external.javadoc.JavadocMemberLevel.PROTECTED
-	options.author = true
-	options.header = project.name
-	options.use = true
-    options.encoding("UTF-8")
-	options.addStringOption("Xdoclint:none", "-quiet")
-    failOnError = false
- }
-
-
-sourceSets {
-    main {
-        java {
-            srcDirs = ['src/main/java']
-        }
-    }
-
-    test {
-        java {
-            srcDirs = ['src/test/java']
-        }
-    }
-}
-
-task javadocJar(type: Jar) {
-    classifier = 'javadoc'
-    from javadoc
+    jcenter()
 }
 
 task sourcesJar(type: Jar) {
-    classifier = 'sources'
+    archiveClassifier = 'sources'
     from sourceSets.main.allSource
-}
-
-signing {
-    sign configurations.archives
 }
 
 artifacts {
     archives javadocJar, sourcesJar
 }
 
+shadowJar {
+    classifier = null
+}
+
 publishing {
-    publications {
-        mavenJava(MavenPublication) {
-            from components.java
-            artifact sourcesJar
-            artifact javadocJar
-            versionMapping {
-                usage('java-api') {
-                    fromResolutionOf('runtimeClasspath')
-                }
-                usage('java-runtime') {
-                    fromResolutionResult()
-                }
+    repositories {
+        maven {
+            def releasesRepoUrl = "https://oss.sonatype.org/service/local/staging/deploy/maven2"
+            def snapshotsRepoUrl = "https://oss.sonatype.org/content/repositories/snapshots"
+            url = version.endsWith('SNAPSHOT') ? snapshotsRepoUrl : releasesRepoUrl
+
+            credentials {
+                username ossrhUsername
+                password ossrhPassword
             }
+        }
+    }
+
+    publications {
+        shadow(MavenPublication) { publication ->
+            artifact shadowJar
+            artifact javadocJar
+            artifact sourcesJar
+
             pom {
                 name = 'Komodo'
+                packaging 'jar'
                 description = 'A Kotlin noSQL database with MVStore as the backend'
                 url = 'https://github.com/clydebarrow/komodo'
                 licenses {
@@ -117,21 +113,15 @@ publishing {
             }
         }
     }
-
-    repositories {
-        maven {
-            credentials {
-                username ossrhUser
-                password ossrhPassword
-            }
-            def releasesRepoUrl = "https://oss.sonatype.org/service/local/staging/deploy/maven2"
-            def snapshotsRepoUrl = "https://oss.sonatype.org/content/repositories/snapshots"
-            url = version.endsWith('SNAPSHOT') ? snapshotsRepoUrl : releasesRepoUrl
-        }
-    }
 }
+
+signing {
+    sign configurations.archives
+    sign publishing.publications.shadow
+}
+
 dependencies {
-    compile fileTree(dir: 'libs', include: ['*.jar'])
+    api fileTree(dir: 'libs', include: ['*.jar'])
     compileOnly "org.threeten:threetenbp:1.4.0"
     compileOnly "io.reactivex.rxjava2:rxjava:2.2.11"
     compileOnly "org.jetbrains.kotlin:kotlin-reflect:${kotlinVersion}"
