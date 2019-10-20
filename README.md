@@ -31,9 +31,9 @@ Komodo is published on Maven Central. Include in your gradle project:
 dependencies {
     implementation "com.control-j:komodo:1.0.1"
 }
+````
 
 A sample class follows:
-````
 package com.controlj.data
 
 import com.controlj.komodo.KeyWrapper
