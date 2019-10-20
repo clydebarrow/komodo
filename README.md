@@ -53,10 +53,8 @@ import com.google.gson.Gson
  * A class used to save info about a connected device
  *
  * @param key The device serial number
- * @param runNumber The last run number seen
- * @param model The device model string
- * @param name The device name
- * @param version The firmware version number
+ * @param address The device address
+ * @param serial The serial number
  * @param description A descriptive string
  */
 data class Sample(
