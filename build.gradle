@@ -19,14 +19,13 @@ plugins {
     id 'signing'
     id 'maven-publish'
     id 'com.github.johnrengelman.shadow' version '5.1.0'
-
 }
 
 apply plugin: 'kotlin'
 apply plugin: 'org.jetbrains.dokka'
 
 group 'com.control-j'
-version '1.0.1'
+version '1.0.2-SNAPSHOT'
 archivesBaseName = 'komodo'
 
 sourceCompatibility = 1.8
