@@ -28,14 +28,21 @@ import org.h2.mvstore.tx.TransactionStore
  * Date: 29/5/18
  * Time: 11:38
  */
-class Komodo(val filename: String = "", compressed: Boolean = false, encryptionKey: String = "") {
+class Komodo(
+        val filename: String = "",
+        compressed: Boolean = false,
+        readCacheMb: Int = 4,
+        autoCommitBufferSizeKb: Int = 64,
+        encryptionKey: String = ""
+) {
 
     internal var store: MVStore
-    internal val builder: MVStore.Builder
+    internal val builder: MVStore.Builder = MVStore.Builder()
     internal val mapList = mutableListOf<KoMap<out Any>>()
 
     init {
-        builder = MVStore.Builder()
+        builder.autoCommitBufferSize(autoCommitBufferSizeKb)
+        builder.cacheSize(readCacheMb)
         if (filename.isNotBlank())
             builder.fileName(filename)
         if (compressed)
@@ -45,8 +52,14 @@ class Komodo(val filename: String = "", compressed: Boolean = false, encryptionK
         store = builder.open()
     }
 
+    var autoCommitDelayMs: Int
+        set(value) {
+            store.autoCommitDelay = value
+        }
+        get() = store.autoCommitDelay
+
     fun open() {
-        if(store.isClosed)
+        if (store.isClosed)
             store = builder.open()
     }
 
@@ -59,7 +72,8 @@ class Komodo(val filename: String = "", compressed: Boolean = false, encryptionK
     fun rollbackTo(version: Long) {
         store.rollbackTo(version)
     }
-    fun <Value: Any> koMap(name: String, codec: KoCodec<Value>): KoMap<Value> {
+
+    fun <Value : Any> koMap(name: String, codec: KoCodec<Value>): KoMap<Value> {
         return KoMap(this, name, codec).also { mapList.add(it) }
     }
 

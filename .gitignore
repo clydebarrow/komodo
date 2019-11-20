@@ -4,3 +4,4 @@ out/
 build/
 test.db
 *.iml
+local.properties
